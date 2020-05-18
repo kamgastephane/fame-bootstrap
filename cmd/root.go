@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 NAME HERE kamga.stephane@gmail.com
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,12 +17,11 @@ package cmd
 
 import (
   "fmt"
-  "os"
   "github.com/spf13/cobra"
+  "os"
 
-  homedir "github.com/mitchellh/go-homedir"
+  "github.com/mitchellh/go-homedir"
   "github.com/spf13/viper"
-
 )
 
 
@@ -33,8 +32,7 @@ var cfgFile string
 var rootCmd = &cobra.Command{
   Use:   "famebootstrap",
   Short: "Bootstrap some entity from fame",
-  Long: `This is a quick utility multi platform to bootstrap entity from fame without the hassle of opening the browser.
-Setting up the swagger parameter etc...`,
+  Long: `This is a quick utility multi platform to bootstrap entity from fame without the hassle of opening the browser and setting up the swagger parameter etc...`,
   Version: "1.0.0",
   // Uncomment the following line if your bare application
   // has an action associated with it:
@@ -56,7 +54,6 @@ func init() {
   // Here you will define your flags and configuration settings.
   // Cobra supports persistent flags, which, if defined here,
   // will be global for your application.
-
   rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.famebootstrap.yaml)")
 }
 
@@ -73,10 +70,10 @@ func initConfig() {
       fmt.Println(err)
       os.Exit(1)
     }
-
-    // Search config in home directory with name ".famebootstrap" (without extension).
+    // Search config in home directory with name ".famebootstrap.yaml" (without extension).
     viper.AddConfigPath(home)
     viper.SetConfigName(".famebootstrap")
+    viper.SetConfigType("yaml")
   }
 
   viper.AutomaticEnv() // read in environment variables that match

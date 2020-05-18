@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <kamga.stephane@gmail.com>
+Copyright © 2020 Kamga Stephane <kamga.stephane@gmail.com>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,56 +18,110 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/spf13/viper"
-	"log"
-	"os"
-
 	"github.com/manifoldco/promptui"
-
 	"github.com/spf13/cobra"
+	"log"
+	"strconv"
 )
-var entity string
+
+const defaultApplicationId = "16"
+const defaultProjectId = "0"
+
+var environment string
+var url string
+var queue string
+
 // bootstrapCmd represents the bootstrap command
 var bootstrapCmd = &cobra.Command{
-	Use:   "bootstrap -e [the name of an entity]",
-	Short: "bootstrap an entity or a list of entity from fame",
-	Long: `Bootstrap an entity of a list of entity from fame, 
-		on the requested environment for the requested service bus queue`,
-	Args: cobra.MaximumNArgs(1),
+	Use:   "bootstrap [the name of a resource] [the ID of the resource]",
+	Short: "bootstrap a resource or a list of resources from fame",
+	Long: `Bootstrap a resource of a list of resources from fame, 
+		on the requested environment for the requested service bus queue. If the name of the resource is not specified, you can run a search to find it`,
+	Args: cobra.MaximumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		url := viper.GetString("url")
-		if len(url) == 0 {
-			log.Fatalln("The Url parameter was not found in the configuration")
+
+		context := getBaseUrl(url)
+		context.ApplicationId, context.ProjectId = getBootstrapContext()
+
+		resourceName := ""
+		fameService := NewService(context)
+		if len(args) > 0 {
+			resourceName = args[0]
+		} else {
+			name, err := inputPrompt("Insert the name of the resource", false)
+			resourceName = name
+			if err != nil {
+				log.Fatalln("Invalid name for the resource to bootstrap")
+			}
 		}
-		fameService := service{Url:url}
-		entities, err := fameService.fetchEntities(entity)
+		resourceContracts, err := fameService.Find(resourceName)
 		if err != nil {
-			os.Exit(-1)
+			log.Fatalln(err)
 		}
-		code, err := selectPrompt("Select the entity:", entities)
+		options, resources := toMap(resourceContracts)
+		var selected string
+		if len(options) > 1 {
+			selected, err = selectPrompt("Select the resource:", options)
+			if err != nil {
+				log.Fatalf("An error occurred while selecting the resource. exception:%s\n", err)
+			}
+		} else if len(options) == 1 {
+			selected = options[0]
+		} else {
+			log.Fatalf("No resources found with name %s\n", resourceName)
+		}
+
+		resourceClassId := resources[selected]
+		if queue == "" {
+			queue, err = inputPrompt("Enter the name of the destination queue:", false)
+			if err != nil {
+				log.Fatalln("Invalid queue name")
+			}
+		}
+		if queue == "" {
+			log.Fatalln("Invalid queue name")
+		}
+		var entityId string = ""
+		if len(args) > 1 {
+			entityId = args[1]
+		} else {
+			entityId, err = inputPrompt("Enter the id of the specific entity to bootstrap (or leave empty to bootstrap the entire resourceClass)", true)
+		}
+		fmt.Printf("creating task for resourceClass %s entityId: %s on queue %s\n", selected, entityId, queue)
+
+		response, err := fameService.CreateTask(queue, strconv.Itoa(resourceClassId), entityId)
 		if err != nil {
-			log.Fatalln("An error occurred while selecting the entity")
+			log.Fatalf("failed to create bootstrap task. exception %s\n", err)
 		}
-		fmt.Printf("bootstrapping entity with name %s and code=%s", entity, code)
-		queue, err := inputPrompt("Enter the name of the destination queue:")
+		fmt.Printf("Dequeing task for resourceClass %s entityId: %s on queue %s \n", selected, entityId, queue)
+
+		dequeueResponse, err := fameService.Dequeue(response.CommandId)
 		if err != nil {
-			log.Fatalln("invalid queue name")
+			log.Fatalf("failed to launch the dequeue task. exception %s\n", err)
 		}
-		taskId, err := fameService.createTask(queue, code)
-		if err != nil {
-			log.Fatalln("Failed to enqueue a bootstrap task")
-		}
-		err = fameService.dequeue(taskId)
-		if err != nil {
-			log.Fatalln("Failed to dequeue a bootstrap task")
-		}
+		fmt.Printf("bootstrap task triggered for resourceClass %s entityId: %s on queue %s. operationId: %s\n", selected, entityId, queue, dequeueResponse.ResponseStatus.Meta.OperationId)
 	},
 }
 
-func inputPrompt(question string) (string, error) {
+
+
+func toMap(input [] ResourceContracts) ([] string, map[string]int) {
+	result := make(map[string]int, len(input))
+	var options []string
+	for _, item := range input {
+		key := fmt.Sprintf("%s (%d)", item.Name, item.ResourceClassId)
+		options = append(options, key)
+		result[key] = item.ResourceClassId
+	}
+	return options, result
+}
+
+func inputPrompt(question string, allowEmpty bool) (string, error) {
 	validate := func(input string) error {
-		if len(input) == 0 {
-			return errors.New("")
+		if !allowEmpty {
+			if len(input) == 0 {
+				return errors.New("")
+			}
 		}
 		return nil
 	}
@@ -81,28 +135,20 @@ func inputPrompt(question string) (string, error) {
 	}
 	return result, nil
 }
-func selectPrompt(question string, options []string) (string, error){
-	var err error
+func selectPrompt(question string, options []string) (string, error) {
 	var result string
-	for ok :=true; ok; ok = err != nil {
-		prompt := promptui.Select{
-			Label: question,
-			Items: options,
-		}
-		_, result, err = prompt.Run()
-
+	prompt := promptui.Select{
+		Label: question,
+		Items: options,
 	}
-	return result, nil
+	_, result, err := prompt.Run()
+	return result, err
 }
+
 func init() {
 	rootCmd.AddCommand(bootstrapCmd)
-
 	// Here you will define your flags and configuration settings.
-
-	bootstrapCmd.Flags().StringVarP(&entity, "entity", "e", "", "The entity to bootstrap e.g. match (required)")
-	_ = bootstrapCmd.MarkFlagRequired("entity")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// bootstrapCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	bootstrapCmd.Flags().StringVarP(&environment, "environment", "e", "", "The environment to run the bootstrap on")
+	bootstrapCmd.Flags().StringVarP(&url, "url", "u", "", "The base url to run the bootstrap on")
+	bootstrapCmd.Flags().StringVarP(&queue, "queue", "q", "", "The destination queue to push the data on")
 }

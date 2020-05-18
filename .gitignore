@@ -13,7 +13,7 @@
 # .idea/modules.xml
 # .idea/*.iml
 # .idea/modules
-# *.iml
+*.iml
 # *.ipr
 
 # CMake
@@ -84,7 +84,11 @@ Temporary Items
 *.dll
 *.so
 *.dylib
-
+build
+famebootstrap.exe
+famebootstrap
+fame-bootstrap
+fame-bootstrap.exe
 # Test binary, built with `go test -c`
 *.test
 

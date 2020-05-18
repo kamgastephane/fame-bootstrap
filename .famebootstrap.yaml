@@ -1,0 +1,8 @@
+url:
+    STG: "{baseUrl}/NotificationEngineTechnicalService/v1/"
+    GOLD: "{baseUrl}/NotificationEngineTechnicalService/v1/"
+    PROD: "{baseUrl}/NotificationEngineTechnicalService/v1/"
+context: # optional
+    applicationId: 16 # optional
+    projectId: 0 # optional
+
